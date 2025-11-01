@@ -28,6 +28,7 @@ export 'src/default_editor/composer/composer_reactions.dart';
 export 'src/default_editor/debug_visualization.dart';
 export 'src/default_editor/default_document_editor.dart';
 export 'src/default_editor/default_document_editor_reactions.dart';
+export 'src/default_editor/code_block.dart';
 export 'src/default_editor/document_caret_overlay.dart';
 export 'src/default_editor/document_focus_and_selection_policies.dart';
 export 'src/infrastructure/document_gestures.dart';

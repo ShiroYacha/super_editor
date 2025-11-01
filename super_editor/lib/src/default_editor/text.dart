@@ -16,6 +16,7 @@ import 'package:super_editor/src/core/editor.dart';
 import 'package:super_editor/src/core/styles.dart';
 import 'package:super_editor/src/default_editor/attributions.dart';
 import 'package:super_editor/src/default_editor/text_ai.dart';
+import 'code_block.dart';
 import 'package:super_editor/src/default_editor/text/custom_underlines.dart';
 import 'package:super_editor/src/infrastructure/_logging.dart';
 import 'package:super_editor/src/infrastructure/attributed_text_styles.dart';
@@ -2314,6 +2315,19 @@ class InsertNewlineInCodeBlockAtCaretCommand extends BaseInsertNewlineAtCaretCom
     NodePosition caretNodePosition,
   ) {
     final node = context.document.getNodeById(caretPosition.nodeId);
+    if (node is CodeBlockNode && caretNodePosition is TextNodePosition) {
+      _insertNewlineWithIndent(
+        context,
+        executor,
+        node,
+        caretPosition,
+        caretNodePosition,
+        node.language,
+        newNodeId,
+      );
+      return;
+    }
+
     if (node is! TextNode || caretNodePosition is! TextNodePosition) {
       return;
     }
@@ -2321,68 +2335,123 @@ class InsertNewlineInCodeBlockAtCaretCommand extends BaseInsertNewlineAtCaretCom
       return;
     }
 
-    // When inserting a newline in the middle of a code block, the
-    // newline should be inserted within the code block, without
-    // breaking the node into two.
-    //
-    // When inserting a newline at the end of a code block, immediately
-    // after some content, the newline should appear within the code block.
-    //
-    // When inserting a newline after another newline, the existing
-    // newline should be removed from the code block, and a new paragraph
-    // should be inserted below the code block.
-    if (caretNodePosition.offset == node.text.length && node.text.last == "\n") {
-      // The caret is at the end of a code block, following another newline.
-      // Remove the existing newline.
-      executor
-        ..executeCommand(
-          ReplaceNodeCommand(
-            existingNodeId: node.id,
-            newNode: node.copyTextNodeWith(
-              text: node.text.removeRegion(
-                startOffset: node.text.length - 1,
-                endOffset: node.text.length,
-              ),
-            ),
-          ),
-        )
-        // Insert a new empty paragraph after the code block.
-        ..executeCommand(
-          InsertNodeAfterNodeCommand(
-            existingNodeId: node.id,
-            newNode: ParagraphNode(
-              id: newNodeId,
-              text: AttributedText(),
-            ),
-          ),
-        )
-        ..executeCommand(
-          ChangeSelectionCommand(
-            DocumentSelection.collapsed(
-              position: DocumentPosition(
-                nodeId: newNodeId,
-                nodePosition: const TextNodePosition(offset: 0),
-              ),
-            ),
-            SelectionChangeType.insertContent,
-            SelectionReason.userInteraction,
-          ),
-        );
-    } else {
-      // Insert a newline within the code block.
-      executor.executeCommand(
-        InsertTextCommand(
-          documentPosition: DocumentPosition(
-            nodeId: node.id,
-            nodePosition: node.endPosition,
-          ),
-          textToInsert: "\n",
-          attributions: {},
-        ),
-      );
-    }
+    final metadataLanguage = node.metadata[kCodeBlockLanguageKey] as String?;
+    final language = (metadataLanguage == null || metadataLanguage.trim().isEmpty)
+        ? kDefaultCodeLanguage
+        : metadataLanguage;
+
+    _insertNewlineWithIndent(
+      context,
+      executor,
+      node,
+      caretPosition,
+      caretNodePosition,
+      language,
+      newNodeId,
+    );
   }
 }
+
+void _insertNewlineWithIndent(
+  EditContext context,
+  CommandExecutor executor,
+  TextNode node,
+  DocumentPosition caretPosition,
+  TextNodePosition caretNodePosition,
+  String language,
+  String newNodeId,
+) {
+  final plainText = node.text.toPlainText(includePlaceholders: false);
+
+  final bool caretAtEnd = caretNodePosition.offset == plainText.length;
+  if (caretAtEnd && plainText.isNotEmpty && plainText.endsWith('\n')) {
+    _exitCodeBlock(context, executor, node, newNodeId);
+    return;
+  }
+
+  final indent = _computeCodeBlockIndent(language, plainText, caretNodePosition.offset);
+  executor.executeCommand(
+    InsertTextCommand(
+      documentPosition: caretPosition,
+      textToInsert: '\n$indent',
+      attributions: {},
+    ),
+  );
+}
+
+void _exitCodeBlock(
+  EditContext context,
+  CommandExecutor executor,
+  TextNode node,
+  String newNodeId,
+) {
+  if (node.text.isEmpty) {
+    return;
+  }
+
+  final updatedText = node.text.removeRegion(
+    startOffset: node.text.length - 1,
+    endOffset: node.text.length,
+  );
+
+  final updatedNode = node is CodeBlockNode
+      ? node.copyCodeBlockWith(text: updatedText)
+      : node.copyTextNodeWith(text: updatedText);
+
+  executor
+    ..executeCommand(
+      ReplaceNodeCommand(
+        existingNodeId: node.id,
+        newNode: updatedNode,
+      ),
+    )
+    ..executeCommand(
+      InsertNodeAfterNodeCommand(
+        existingNodeId: updatedNode.id,
+        newNode: ParagraphNode(
+          id: newNodeId,
+          text: AttributedText(),
+        ),
+      ),
+    )
+    ..executeCommand(
+      ChangeSelectionCommand(
+        DocumentSelection.collapsed(
+          position: DocumentPosition(
+            nodeId: newNodeId,
+            nodePosition: const TextNodePosition(offset: 0),
+          ),
+        ),
+        SelectionChangeType.insertContent,
+        SelectionReason.userInteraction,
+      ),
+    );
+}
+
+String _computeCodeBlockIndent(String language, String fullText, int caretOffset) {
+  if (caretOffset <= 0 || fullText.isEmpty) {
+    return '';
+  }
+
+  final lineStart = fullText.lastIndexOf('\n', caretOffset - 1) + 1;
+  final currentLine = fullText.substring(lineStart, caretOffset);
+  final whitespaceMatch = _leadingWhitespacePattern.firstMatch(currentLine);
+  var indent = whitespaceMatch?.group(0) ?? '';
+
+  final trimmed = currentLine.trimRight();
+  if (_isYamlLanguage(language) && trimmed.endsWith(':')) {
+    indent = '$indent  ';
+  }
+
+  return indent;
+}
+
+bool _isYamlLanguage(String language) {
+  final normalized = language.toLowerCase();
+  return normalized == 'yaml' || normalized == 'yml';
+}
+
+final RegExp _leadingWhitespacePattern = RegExp(r'^[ \t]*');
 
 /// An [EditCommand] that handles a typical newline insertion.
 ///

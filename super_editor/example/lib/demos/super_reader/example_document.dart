@@ -34,11 +34,13 @@ MutableDocument createInitialDocument() {
       ),
       ListItemNode.unordered(
         id: Editor.createNodeId(),
-        text: AttributedText('SuperEditor is a ready-made, configurable document editing experience.'),
+        text: AttributedText(
+            'SuperEditor is a ready-made, configurable document editing experience.'),
       ),
       ListItemNode.unordered(
         id: Editor.createNodeId(),
-        text: AttributedText('SuperTextField is a ready-made, configurable text field.'),
+        text: AttributedText(
+            'SuperTextField is a ready-made, configurable text field.'),
       ),
       ParagraphNode(
         id: Editor.createNodeId(),
@@ -49,7 +51,8 @@ MutableDocument createInitialDocument() {
       ),
       ParagraphNode(
         id: Editor.createNodeId(),
-        text: AttributedText('To get started with your own editing experience, take the following steps:'),
+        text: AttributedText(
+            'To get started with your own editing experience, take the following steps:'),
       ),
       ParagraphNode(
         id: Editor.createNodeId(),
@@ -66,11 +69,13 @@ MutableDocument createInitialDocument() {
       ),
       ListItemNode.unordered(
         id: Editor.createNodeId(),
-        text: AttributedText("Use MutableDocument as an in-memory representation of a document."),
+        text: AttributedText(
+            "Use MutableDocument as an in-memory representation of a document."),
       ),
       ListItemNode.unordered(
         id: Editor.createNodeId(),
-        text: AttributedText("Implement your own document data store by implementing the Document api."),
+        text: AttributedText(
+            "Implement your own document data store by implementing the Document api."),
       ),
       ListItemNode.unordered(
         id: Editor.createNodeId(),
@@ -80,11 +85,13 @@ MutableDocument createInitialDocument() {
       ),
       ListItemNode.unordered(
         id: Editor.createNodeId(),
-        text: AttributedText("Use SuperSelectableText to paint text with selection boxes and a caret."),
+        text: AttributedText(
+            "Use SuperSelectableText to paint text with selection boxes and a caret."),
       ),
       ListItemNode.unordered(
         id: Editor.createNodeId(),
-        text: AttributedText('Use AttributedText to quickly and easily apply metadata spans to a string.'),
+        text: AttributedText(
+            'Use AttributedText to quickly and easily apply metadata spans to a string.'),
       ),
       ParagraphNode(
         id: Editor.createNodeId(),
@@ -95,7 +102,8 @@ MutableDocument createInitialDocument() {
       ),
       ParagraphNode(
         id: Editor.createNodeId(),
-        text: AttributedText('To get started with your own editing experience, take the following steps:'),
+        text: AttributedText(
+            'To get started with your own editing experience, take the following steps:'),
       ),
       TaskNode(
         id: Editor.createNodeId(),
@@ -130,20 +138,16 @@ MutableDocument createInitialDocument() {
           "Built by the Flutter Bounty Hunters",
           AttributedSpans(attributions: [
             SpanMarker(
-                attribution: LinkAttribution.fromUri(Uri.parse("https://flutterbountyhunters.com")),
+                attribution: LinkAttribution.fromUri(
+                    Uri.parse("https://flutterbountyhunters.com")),
                 offset: 13,
                 markerType: SpanMarkerType.start),
             SpanMarker(
-                attribution: LinkAttribution.fromUri(Uri.parse("https://flutterbountyhunters.com")),
+                attribution: LinkAttribution.fromUri(
+                    Uri.parse("https://flutterbountyhunters.com")),
                 offset: 34,
                 markerType: SpanMarkerType.end),
           ]),
-        ),
-      ),
-      ParagraphNode(
-        id: Editor.createNodeId(),
-        text: AttributedText(
-          "",
         ),
       ),
     ],

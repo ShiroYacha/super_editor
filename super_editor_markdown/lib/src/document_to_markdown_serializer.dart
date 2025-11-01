@@ -30,6 +30,7 @@ String serializeDocumentToMarkdown(
     const HorizontalRuleNodeSerializer(),
     const ListItemNodeSerializer(),
     const TaskNodeSerializer(),
+    const CodeBlockNodeSerializer(),
     HeaderNodeSerializer(syntax),
     ParagraphNodeSerializer(syntax),
     const TableBlockNodeSerializer(),
@@ -263,6 +264,44 @@ class ListItemNodeSerializer extends NodeTypedDocumentNodeMarkdownSerializer<Lis
 /// paragraphs.
 ///
 /// Includes support for headers, blockquotes, and code blocks.
+class CodeBlockNodeSerializer extends NodeTypedDocumentNodeMarkdownSerializer<CodeBlockNode> {
+  const CodeBlockNodeSerializer();
+
+  @override
+  String doSerialization(
+    Document document,
+    CodeBlockNode node, {
+    NodeSelection? selection,
+  }) {
+    if (selection != null && selection is! TextNodeSelection) {
+      return '';
+    }
+    final textSelection = selection as TextNodeSelection?;
+    if (textSelection != null && textSelection.isCollapsed) {
+      return '';
+    }
+
+    final textToConvert = textSelection != null
+        ? node.text.copyText(textSelection.start, textSelection.end)
+        : node.text.copyText(0);
+
+    final codeContent = textToConvert.toPlainText(includePlaceholders: false);
+    final languageToken = node.language == kDefaultCodeLanguage ? '' : node.language;
+
+    final buffer = StringBuffer();
+    buffer.writeln(languageToken.isEmpty ? '```' : '```$languageToken');
+    if (codeContent.isNotEmpty) {
+      buffer.write(codeContent);
+      if (!codeContent.endsWith('\n')) {
+        buffer.writeln();
+      }
+    }
+    buffer.write('```');
+
+    return buffer.toString();
+  }
+}
+
 class ParagraphNodeSerializer extends NodeTypedDocumentNodeMarkdownSerializer<ParagraphNode> {
   const ParagraphNodeSerializer(this.markdownSyntax);
 

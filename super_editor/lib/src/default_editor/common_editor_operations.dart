@@ -2160,6 +2160,78 @@ class CommonEditorOperations {
     return true;
   }
 
+  /// Indents all lines touched by the current selection when it sits within a code block.
+  ///
+  /// Returns `true` if any indentation was applied. Returns `false` if the selection
+  /// isn't within a code block or if no indentation changes were made.
+  bool indentCodeBlockSelection() {
+    final selection = composer.selection;
+    if (selection == null) {
+      return false;
+    }
+
+    if (selection.base.nodeId != selection.extent.nodeId) {
+      return false;
+    }
+
+    final node = document.getNodeById(selection.extent.nodeId);
+    if (!_isCodeBlockTextNode(node)) {
+      return false;
+    }
+
+    final basePosition = selection.base.nodePosition;
+    final extentPosition = selection.extent.nodePosition;
+    if (basePosition is! TextNodePosition || extentPosition is! TextNodePosition) {
+      return false;
+    }
+
+    editor.execute([
+      IndentCodeBlockSelectionRequest(
+        nodeId: node!.id,
+        basePosition: basePosition,
+        extentPosition: extentPosition,
+      ),
+    ]);
+
+    return true;
+  }
+
+  /// Un-indents all lines touched by the current selection when it sits within a code block.
+  ///
+  /// Returns `true` if any indentation was removed. Returns `false` if the selection
+  /// isn't within a code block or if no indentation changes were made.
+  bool unindentCodeBlockSelection() {
+    final selection = composer.selection;
+    if (selection == null) {
+      return false;
+    }
+
+    if (selection.base.nodeId != selection.extent.nodeId) {
+      return false;
+    }
+
+    final node = document.getNodeById(selection.extent.nodeId);
+    if (!_isCodeBlockTextNode(node)) {
+      return false;
+    }
+
+    final basePosition = selection.base.nodePosition;
+    final extentPosition = selection.extent.nodePosition;
+    if (basePosition is! TextNodePosition || extentPosition is! TextNodePosition) {
+      return false;
+    }
+
+    editor.execute([
+      UnindentCodeBlockSelectionRequest(
+        nodeId: node!.id,
+        basePosition: basePosition,
+        extentPosition: extentPosition,
+      ),
+    ]);
+
+    return true;
+  }
+
   /// Converts the [TextNode] with the current [DocumentComposer] selection
   /// extent to a [ListItemNode] of the given [type], or does nothing if the
   /// current node is not a [TextNode], or if the current selection spans
@@ -2251,6 +2323,14 @@ class CommonEditorOperations {
     ]);
 
     return true;
+  }
+
+  bool _isCodeBlockTextNode(DocumentNode? node) {
+    if (node is! TextNode) {
+      return false;
+    }
+
+    return node.getMetadataValue(NodeMetadata.blockType) == codeAttribution;
   }
 
   bool _isTextEntryNode({
@@ -2411,6 +2491,327 @@ class CommonEditorOperations {
       ),
     ]);
   }
+}
+
+const String _kCodeBlockIndent = '  ';
+
+class IndentCodeBlockSelectionRequest implements EditRequest {
+  const IndentCodeBlockSelectionRequest({
+    required this.nodeId,
+    required this.basePosition,
+    required this.extentPosition,
+  });
+
+  final String nodeId;
+  final TextNodePosition basePosition;
+  final TextNodePosition extentPosition;
+}
+
+class UnindentCodeBlockSelectionRequest implements EditRequest {
+  const UnindentCodeBlockSelectionRequest({
+    required this.nodeId,
+    required this.basePosition,
+    required this.extentPosition,
+  });
+
+  final String nodeId;
+  final TextNodePosition basePosition;
+  final TextNodePosition extentPosition;
+}
+
+class IndentCodeBlockSelectionCommand extends EditCommand {
+  const IndentCodeBlockSelectionCommand({
+    required this.nodeId,
+    required this.basePosition,
+    required this.extentPosition,
+  });
+
+  final String nodeId;
+  final TextNodePosition basePosition;
+  final TextNodePosition extentPosition;
+
+  @override
+  HistoryBehavior get historyBehavior => HistoryBehavior.undoable;
+
+  @override
+  void execute(EditContext context, CommandExecutor executor) {
+    final document = context.document;
+    final node = document.getNodeById(nodeId);
+    if (node is! TextNode) {
+      return;
+    }
+
+    if (node.getMetadataValue(NodeMetadata.blockType) != codeAttribution) {
+      return;
+    }
+
+    final plainText = node.text.toPlainText(includePlaceholders: false);
+    final lineStarts = _collectCodeBlockLineStarts(
+      plainText,
+      basePosition.offset,
+      extentPosition.offset,
+    );
+    if (lineStarts.isEmpty) {
+      return;
+    }
+
+    var updatedText = node.text;
+    final changes = <EditEvent>[];
+
+    var updatedBase = basePosition.offset;
+    var updatedExtent = extentPosition.offset;
+    var runningDelta = 0;
+
+    for (final originalLineStart in lineStarts) {
+      final insertionOffset = originalLineStart + runningDelta;
+
+      updatedText = updatedText.insertString(
+        textToInsert: _kCodeBlockIndent,
+        startOffset: insertionOffset,
+        applyAttributions: {},
+      );
+
+      changes.add(
+        DocumentEdit(
+          TextInsertionEvent(
+            nodeId: nodeId,
+            offset: insertionOffset,
+            text: AttributedText(_kCodeBlockIndent),
+          ),
+        ),
+      );
+
+      updatedBase = _adjustOffsetForInsertion(updatedBase, insertionOffset, _kCodeBlockIndent.length);
+      updatedExtent =
+          _adjustOffsetForInsertion(updatedExtent, insertionOffset, _kCodeBlockIndent.length);
+
+      runningDelta += _kCodeBlockIndent.length;
+    }
+
+    document.replaceNodeById(
+      node.id,
+      node.copyTextNodeWith(text: updatedText),
+    );
+
+    executor.logChanges(changes);
+
+    executor.executeCommand(
+      ChangeSelectionCommand(
+        DocumentSelection(
+          base: DocumentPosition(
+            nodeId: nodeId,
+            nodePosition: TextNodePosition(
+              offset: updatedBase,
+              affinity: basePosition.affinity,
+            ),
+          ),
+          extent: DocumentPosition(
+            nodeId: nodeId,
+            nodePosition: TextNodePosition(
+              offset: updatedExtent,
+              affinity: extentPosition.affinity,
+            ),
+          ),
+        ),
+        SelectionChangeType.insertContent,
+        SelectionReason.userInteraction,
+      ),
+    );
+  }
+}
+
+class UnindentCodeBlockSelectionCommand extends EditCommand {
+  const UnindentCodeBlockSelectionCommand({
+    required this.nodeId,
+    required this.basePosition,
+    required this.extentPosition,
+  });
+
+  final String nodeId;
+  final TextNodePosition basePosition;
+  final TextNodePosition extentPosition;
+
+  @override
+  HistoryBehavior get historyBehavior => HistoryBehavior.undoable;
+
+  @override
+  void execute(EditContext context, CommandExecutor executor) {
+    final document = context.document;
+    final node = document.getNodeById(nodeId);
+    if (node is! TextNode) {
+      return;
+    }
+
+    if (node.getMetadataValue(NodeMetadata.blockType) != codeAttribution) {
+      return;
+    }
+
+    final plainText = node.text.toPlainText(includePlaceholders: false);
+    final lineStarts = _collectCodeBlockLineStarts(
+      plainText,
+      basePosition.offset,
+      extentPosition.offset,
+    );
+    if (lineStarts.isEmpty) {
+      return;
+    }
+
+    var updatedText = node.text;
+    final changes = <EditEvent>[];
+
+    var updatedBase = basePosition.offset;
+    var updatedExtent = extentPosition.offset;
+    var runningDelta = 0;
+
+    for (final originalLineStart in lineStarts) {
+      final removalOffset = originalLineStart + runningDelta;
+      final currentPlainText = updatedText.toPlainText(includePlaceholders: false);
+      final removalWidth = _computeIndentRemovalWidth(currentPlainText, removalOffset);
+      if (removalWidth == 0) {
+        continue;
+      }
+
+      final removedSegment = updatedText.copyText(removalOffset, removalOffset + removalWidth);
+
+      updatedText = updatedText.removeRegion(
+        startOffset: removalOffset,
+        endOffset: removalOffset + removalWidth,
+      );
+
+      changes.add(
+        DocumentEdit(
+          TextDeletedEvent(
+            nodeId,
+            offset: removalOffset,
+            deletedText: removedSegment,
+          ),
+        ),
+      );
+
+      updatedBase = _adjustOffsetForRemoval(updatedBase, removalOffset, removalWidth);
+      updatedExtent = _adjustOffsetForRemoval(updatedExtent, removalOffset, removalWidth);
+
+      runningDelta -= removalWidth;
+    }
+
+    if (changes.isEmpty) {
+      return;
+    }
+
+    document.replaceNodeById(
+      node.id,
+      node.copyTextNodeWith(text: updatedText),
+    );
+
+    executor.logChanges(changes);
+
+    executor.executeCommand(
+      ChangeSelectionCommand(
+        DocumentSelection(
+          base: DocumentPosition(
+            nodeId: nodeId,
+            nodePosition: TextNodePosition(
+              offset: updatedBase,
+              affinity: basePosition.affinity,
+            ),
+          ),
+          extent: DocumentPosition(
+            nodeId: nodeId,
+            nodePosition: TextNodePosition(
+              offset: updatedExtent,
+              affinity: extentPosition.affinity,
+            ),
+          ),
+        ),
+        SelectionChangeType.deleteContent,
+        SelectionReason.userInteraction,
+      ),
+    );
+  }
+}
+
+List<int> _collectCodeBlockLineStarts(String text, int baseOffset, int extentOffset) {
+  final start = min(baseOffset, extentOffset);
+  final end = max(baseOffset, extentOffset);
+  final isCollapsed = start == end;
+
+  if (text.isEmpty) {
+    return [0];
+  }
+
+  final firstLineStart = _lineStartForOffset(text, start);
+  final lastAnchorOffset = isCollapsed ? end : (end == 0 ? 0 : end - 1);
+  final lastLineStart = _lineStartForOffset(text, lastAnchorOffset);
+
+  final lineStarts = <int>[firstLineStart];
+  var currentLineStart = firstLineStart;
+
+  while (currentLineStart < lastLineStart) {
+    final newlineIndex = text.indexOf('\n', currentLineStart);
+    if (newlineIndex == -1) {
+      break;
+    }
+
+    currentLineStart = newlineIndex + 1;
+    if (currentLineStart <= lastLineStart) {
+      lineStarts.add(currentLineStart);
+    } else {
+      break;
+    }
+  }
+
+  return lineStarts;
+}
+
+int _lineStartForOffset(String text, int offset) {
+  if (offset <= 0 || text.isEmpty) {
+    return 0;
+  }
+
+  final clampedOffset = offset > text.length ? text.length : offset;
+  final searchIndex = clampedOffset - 1;
+  final newlineIndex = text.lastIndexOf('\n', searchIndex);
+  return newlineIndex + 1;
+}
+
+int _adjustOffsetForInsertion(int original, int insertOffset, int insertedLength) {
+  if (original < insertOffset) {
+    return original;
+  }
+  return original + insertedLength;
+}
+
+int _adjustOffsetForRemoval(int original, int removeOffset, int removedLength) {
+  if (original <= removeOffset) {
+    return original;
+  }
+  if (original <= removeOffset + removedLength) {
+    return removeOffset;
+  }
+  return original - removedLength;
+}
+
+int _computeIndentRemovalWidth(String text, int offset) {
+  if (offset >= text.length) {
+    return 0;
+  }
+
+  if (text.startsWith(_kCodeBlockIndent, offset)) {
+    return _kCodeBlockIndent.length;
+  }
+
+  if (text.codeUnitAt(offset) == 0x09) {
+    // Tab character
+    return 1;
+  }
+
+  var removal = 0;
+  var index = offset;
+  while (index < text.length && text[index] == ' ' && removal < _kCodeBlockIndent.length) {
+    removal++;
+    index++;
+  }
+  return removal;
 }
 
 class PasteEditorRequest implements EditRequest {

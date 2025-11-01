@@ -16,7 +16,7 @@ class ExampleEditor extends StatefulWidget {
   State<ExampleEditor> createState() => _ExampleEditorState();
 }
 
-class _ExampleEditorState extends State<ExampleEditor> {
+class _ExampleEditorState extends State<ExampleEditor> implements EditListener {
   final GlobalKey _viewportKey = GlobalKey();
   final GlobalKey _docLayoutKey = GlobalKey();
 
@@ -56,17 +56,21 @@ class _ExampleEditorState extends State<ExampleEditor> {
     _doc = createInitialDocument()..addListener(_onDocumentChange);
     _composer = MutableDocumentComposer();
     _composer.selectionNotifier.addListener(_hideOrShowToolbar);
-    _docEditor = createDefaultDocumentEditor(document: _doc, composer: _composer, isHistoryEnabled: true);
+    _docEditor = createDefaultDocumentEditor(
+        document: _doc, composer: _composer, isHistoryEnabled: true);
     _docOps = CommonEditorOperations(
       editor: _docEditor,
       document: _doc,
       composer: _composer,
-      documentLayoutResolver: () => _docLayoutKey.currentState as DocumentLayout,
+      documentLayoutResolver: () =>
+          _docLayoutKey.currentState as DocumentLayout,
     );
     _editorFocusNode = FocusNode();
     _scrollController = ScrollController()..addListener(_hideOrShowToolbar);
 
     _iosControlsController = SuperEditorIosControlsController();
+
+    _docEditor.addListener(this);
   }
 
   @override
@@ -150,8 +154,10 @@ class _ExampleEditorState extends State<ExampleEditor> {
     // TODO: switch this to use a Leader and Follower
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
       final layout = _docLayoutKey.currentState as DocumentLayout;
-      final docBoundingBox = layout.getRectForSelection(_composer.selection!.base, _composer.selection!.extent)!;
-      final globalOffset = layout.getGlobalOffsetFromDocumentOffset(Offset.zero);
+      final docBoundingBox = layout.getRectForSelection(
+          _composer.selection!.base, _composer.selection!.extent)!;
+      final globalOffset =
+          layout.getGlobalOffsetFromDocumentOffset(Offset.zero);
       final overlayBoundingBox = docBoundingBox.shift(globalOffset);
 
       _textSelectionAnchor.value = overlayBoundingBox.topCenter;
@@ -240,8 +246,10 @@ class _ExampleEditorState extends State<ExampleEditor> {
     // TODO: switch to a Leader and Follower for this
     WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
       final docBoundingBox = (_docLayoutKey.currentState as DocumentLayout)
-          .getRectForSelection(_composer.selection!.base, _composer.selection!.extent)!;
-      final docBox = _docLayoutKey.currentContext!.findRenderObject() as RenderBox;
+          .getRectForSelection(
+              _composer.selection!.base, _composer.selection!.extent)!;
+      final docBox =
+          _docLayoutKey.currentContext!.findRenderObject() as RenderBox;
       final overlayBoundingBox = Rect.fromPoints(
         docBox.localToGlobal(docBoundingBox.topLeft),
         docBox.localToGlobal(docBoundingBox.bottomRight),
@@ -309,7 +317,10 @@ class _ExampleEditorState extends State<ExampleEditor> {
                       listenable: _composer.selectionNotifier,
                       builder: (context, child) {
                         return Padding(
-                          padding: EdgeInsets.only(bottom: _isMobile && _composer.selection != null ? 48 : 0),
+                          padding: EdgeInsets.only(
+                              bottom: _isMobile && _composer.selection != null
+                                  ? 48
+                                  : 0),
                           child: child,
                         );
                       },
@@ -342,8 +353,12 @@ class _ExampleEditorState extends State<ExampleEditor> {
 
   Widget _buildDebugVisualsToggle() {
     return FloatingActionButton(
-      backgroundColor: _brightness.value == Brightness.light ? _darkBackground : _lightBackground,
-      foregroundColor: _brightness.value == Brightness.light ? _lightBackground : _darkBackground,
+      backgroundColor: _brightness.value == Brightness.light
+          ? _darkBackground
+          : _lightBackground,
+      foregroundColor: _brightness.value == Brightness.light
+          ? _lightBackground
+          : _darkBackground,
       elevation: 5,
       onPressed: () {
         setState(() {
@@ -363,11 +378,17 @@ class _ExampleEditorState extends State<ExampleEditor> {
 
   Widget _buildLightAndDarkModeToggle() {
     return FloatingActionButton(
-      backgroundColor: _brightness.value == Brightness.light ? _darkBackground : _lightBackground,
-      foregroundColor: _brightness.value == Brightness.light ? _lightBackground : _darkBackground,
+      backgroundColor: _brightness.value == Brightness.light
+          ? _darkBackground
+          : _lightBackground,
+      foregroundColor: _brightness.value == Brightness.light
+          ? _lightBackground
+          : _darkBackground,
       elevation: 5,
       onPressed: () {
-        _brightness.value = _brightness.value == Brightness.light ? Brightness.dark : Brightness.light;
+        _brightness.value = _brightness.value == Brightness.light
+            ? Brightness.dark
+            : Brightness.light;
       },
       child: _brightness.value == Brightness.light
           ? const Icon(
@@ -397,7 +418,8 @@ class _ExampleEditorState extends State<ExampleEditor> {
               documentLayoutKey: _docLayoutKey,
               documentOverlayBuilders: [
                 DefaultCaretOverlayBuilder(
-                  caretStyle: const CaretStyle().copyWith(color: isLight ? Colors.black : Colors.redAccent),
+                  caretStyle: const CaretStyle().copyWith(
+                      color: isLight ? Colors.black : Colors.redAccent),
                 ),
                 if (defaultTargetPlatform == TargetPlatform.iOS) ...[
                   SuperEditorIosHandlesDocumentLayerBuilder(),
@@ -426,7 +448,9 @@ class _ExampleEditorState extends State<ExampleEditor> {
               ],
               gestureMode: _gestureMode,
               inputSource: _inputSource,
-              keyboardActions: _inputSource == TextInputSource.ime ? defaultImeKeyboardActions : defaultKeyboardActions,
+              keyboardActions: _inputSource == TextInputSource.ime
+                  ? defaultImeKeyboardActions
+                  : defaultKeyboardActions,
               androidToolbarBuilder: (_) => _buildAndroidFloatingToolbar(),
               overlayController: _overlayController,
               plugins: {
@@ -498,7 +522,8 @@ class _ExampleEditorState extends State<ExampleEditor> {
       setWidth: (nodeId, width) {
         print("Applying width $width to node $nodeId");
         final node = _doc.getNodeById(nodeId)!;
-        final currentStyles = SingleColumnLayoutComponentStyles.fromMetadata(node);
+        final currentStyles =
+            SingleColumnLayoutComponentStyles.fromMetadata(node);
 
         _docEditor.execute([
           ChangeSingleColumnLayoutComponentStylesRequest(
@@ -512,6 +537,11 @@ class _ExampleEditorState extends State<ExampleEditor> {
       },
       closeToolbar: _hideImageToolbar,
     );
+  }
+
+  @override
+  void onEdit(List<EditEvent> changeList) {
+    print(">> onEdit: ${changeList.map((e) => e.toString()).join("\n")}");
   }
 }
 

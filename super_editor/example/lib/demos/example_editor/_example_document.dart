@@ -13,6 +13,23 @@ MutableDocument createInitialDocument() {
           padding: EdgeInsets.zero,
         ).toMetadata(),
       ),
+      CodeBlockNode(
+        id: Editor.createNodeId(),
+        language: 'yaml',
+        text: AttributedText(
+          'site:\n'
+          '  title: Flutter Bounty Hunters\n'
+          '  products:\n'
+          '    - super_editor\n'
+          '    - super_reader\n',
+        ),
+      ),
+      ParagraphNode(
+        id: Editor.createNodeId(),
+        text: AttributedText(
+          "",
+        ),
+      ),
       ParagraphNode(
         id: Editor.createNodeId(),
         text: AttributedText('Welcome to Super Editor 💙 🚀'),
@@ -54,7 +71,8 @@ MutableDocument createInitialDocument() {
       ),
       ParagraphNode(
         id: Editor.createNodeId(),
-        text: AttributedText('To get started with your own editing experience, take the following steps:'),
+        text: AttributedText(
+            'To get started with your own editing experience, take the following steps:'),
       ),
       TaskNode(
         id: Editor.createNodeId(),

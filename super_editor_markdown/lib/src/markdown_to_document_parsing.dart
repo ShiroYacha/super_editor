@@ -362,25 +362,32 @@ class _MarkdownToDocument implements md.NodeVisitor {
   }
 
   void _addCodeBlock(md.Element element) {
-    // TODO: we may need to replace escape characters with literals here
-    // CodeSampleNode(
-    //   code: element.textContent //
-    //       .replaceAll('&lt;', '<') //
-    //       .replaceAll('&gt;', '>') //
-    //       .trim(),
-    // ),
+    final language = _extractCodeBlockLanguage(element);
 
     _content.add(
-      ParagraphNode(
+      CodeBlockNode(
         id: Editor.createNodeId(),
-        text: AttributedText(
-          element.textContent,
-        ),
-        metadata: const {
-          'blockType': codeAttribution,
-        },
+        text: AttributedText(element.textContent),
+        language: language,
       ),
     );
+  }
+
+  String _extractCodeBlockLanguage(md.Element element) {
+    final classAttribute = element.attributes['class'];
+    if (classAttribute != null) {
+      final match = RegExp(r'language-([A-Za-z0-9_+\-]+)').firstMatch(classAttribute);
+      if (match != null) {
+        return match.group(1) ?? kDefaultCodeLanguage;
+      }
+    }
+
+    final explicitLanguage = element.attributes['data-language'] ?? element.attributes['language'];
+    if (explicitLanguage != null && explicitLanguage.trim().isNotEmpty) {
+      return explicitLanguage.trim();
+    }
+
+    return kDefaultCodeLanguage;
   }
 
   void _addImage(_MarkdownImage image) {

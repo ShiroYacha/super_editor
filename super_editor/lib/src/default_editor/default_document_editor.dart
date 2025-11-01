@@ -8,6 +8,7 @@ import 'package:super_editor/src/default_editor/composer/composer_reactions.dart
 import 'package:super_editor/src/default_editor/list_items.dart';
 import 'package:super_editor/src/default_editor/multi_node_editing.dart';
 import 'package:super_editor/src/default_editor/paragraph.dart';
+import 'package:super_editor/src/default_editor/code_block.dart';
 import 'package:super_editor/src/default_editor/tasks.dart';
 import 'package:super_editor/src/default_editor/text.dart';
 
@@ -30,6 +31,23 @@ Editor createDefaultDocumentEditor({
     reactionPipeline: List.from(defaultEditorReactions),
     isHistoryEnabled: isHistoryEnabled,
   );
+
+  CodeSyntaxHighlightReaction? codeHighlightReaction;
+  for (final reaction in editor.reactionPipeline) {
+    if (reaction is CodeSyntaxHighlightReaction) {
+      codeHighlightReaction = reaction;
+      break;
+    }
+  }
+
+  if (codeHighlightReaction != null) {
+    for (final node in document) {
+      codeHighlightReaction.scheduleHighlightForNode(
+        node: node,
+        requestDispatcher: editor,
+      );
+    }
+  }
 
   return editor;
 }
@@ -121,12 +139,52 @@ final defaultRequestHandlers = List.unmodifiable(<EditRequestHandler>[
     }
 
     final selection = editor.composer.selection;
+    if (selection == null || !selection.isCollapsed) {
+      return null;
+    }
+
+    final extent = selection.extent;
+    final node = editor.document.getNodeById(extent.nodeId);
+    if (node is! ParagraphNode) {
+      return null;
+    }
+    if (node.metadata[NodeMetadata.blockType] == codeAttribution) {
+      return null;
+    }
+
+    final position = extent.nodePosition;
+    if (position is! TextNodePosition) {
+      return null;
+    }
+
+    final plainText = node.text.toPlainText(includePlaceholders: false);
+    if (position.offset != plainText.length) {
+      return null;
+    }
+
+    final match = codeBlockShortcutPattern.firstMatch(plainText.trimRight());
+    if (match == null) {
+      return null;
+    }
+
+    final language = match.group(1);
+    return ConvertParagraphToCodeBlockCommand(nodeId: node.id, language: language);
+  },
+  (editor, request) {
+    if (request is! InsertNewlineAtCaretRequest) {
+      return null;
+    }
+
+    final selection = editor.composer.selection;
     if (selection == null) {
       return null;
     }
 
     final base = selection.base;
     final node = editor.document.getNodeById(base.nodeId);
+    if (node is CodeBlockNode) {
+      return InsertNewlineInCodeBlockAtCaretCommand(request.newNodeId);
+    }
     if (node is! ParagraphNode) {
       return null;
     }
@@ -202,6 +260,9 @@ final defaultRequestHandlers = List.unmodifiable(<EditRequestHandler>[
       : null,
   (editor, request) => request is DeleteUpstreamAtBeginningOfNodeRequest && request.node is ParagraphNode
       ? DeleteUpstreamAtBeginningOfParagraphCommand(request.node)
+      : null,
+  (editor, request) => request is DeleteUpstreamAtBeginningOfNodeRequest && request.node is CodeBlockNode
+      ? ConvertCodeBlockToParagraphCommand(nodeId: request.node.id)
       : null,
   (editor, request) => request is DeleteUpstreamAtBeginningOfNodeRequest && request.node is BlockNode
       ? DeleteUpstreamAtBeginningOfBlockNodeCommand(request.node)
@@ -285,6 +346,37 @@ final defaultRequestHandlers = List.unmodifiable(<EditRequestHandler>[
       ? ConvertTaskToParagraphCommand(
           nodeId: request.nodeId,
           paragraphMetadata: request.paragraphMetadata,
+        )
+      : null,
+  (editor, request) => request is ConvertParagraphToCodeBlockRequest
+      ? ConvertParagraphToCodeBlockCommand(nodeId: request.nodeId, language: request.language)
+      : null,
+  (editor, request) => request is ConvertCodeBlockToParagraphRequest
+      ? ConvertCodeBlockToParagraphCommand(nodeId: request.nodeId)
+      : null,
+  (editor, request) => request is ChangeCodeBlockLanguageRequest
+      ? ChangeCodeBlockLanguageCommand(nodeId: request.nodeId, language: request.language)
+      : null,
+  (editor, request) => request is ApplyCodeBlockHighlightRequest
+      ? ApplyCodeBlockHighlightCommand(
+          nodeId: request.nodeId,
+          language: request.language,
+          plainText: request.plainText,
+          spans: request.spans,
+        )
+      : null,
+  (editor, request) => request is IndentCodeBlockSelectionRequest
+      ? IndentCodeBlockSelectionCommand(
+          nodeId: request.nodeId,
+          basePosition: request.basePosition,
+          extentPosition: request.extentPosition,
+        )
+      : null,
+  (editor, request) => request is UnindentCodeBlockSelectionRequest
+      ? UnindentCodeBlockSelectionCommand(
+          nodeId: request.nodeId,
+          basePosition: request.basePosition,
+          extentPosition: request.extentPosition,
         )
       : null,
   (editor, request) => request is DeleteUpstreamAtBeginningOfNodeRequest && request.node is TaskNode
@@ -375,5 +467,6 @@ final defaultEditorReactions = List.unmodifiable([
   const DashConversionReaction(),
   //---- End Content Conversions ---
 
+  CodeSyntaxHighlightReaction(),
   UpdateSubTaskIndentAfterTaskDeletionReaction(),
 ]);

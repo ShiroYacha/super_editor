@@ -658,11 +658,21 @@ void moveToRightEndOfLineAndModifySelection(SuperEditorContext context) {
 }
 
 void indentListItem(SuperEditorContext context) {
-  context.commonOps.indentListItem();
+  final didIndentList = context.commonOps.indentListItem();
+  if (didIndentList) {
+    return;
+  }
+
+  context.commonOps.indentCodeBlockSelection();
 }
 
 void unIndentListItem(SuperEditorContext context) {
-  context.commonOps.unindentListItem();
+  final didUnindentList = context.commonOps.unindentListItem();
+  if (didUnindentList) {
+    return;
+  }
+
+  context.commonOps.unindentCodeBlockSelection();
 }
 
 void insertNewLine(SuperEditorContext context) {

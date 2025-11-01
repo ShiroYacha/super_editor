@@ -210,10 +210,22 @@ void main() {
 
         expect(
           serializeDocumentToMarkdown(doc),
-          '''
-```
-This is some code
-```''',
+          '```\nThis is some code\n```',
+        );
+      });
+
+      test('code block node with language', () {
+        final doc = MutableDocument(nodes: [
+          CodeBlockNode(
+            id: '1',
+            text: AttributedText('void main() {}\n'),
+            language: 'dart',
+          ),
+        ]);
+
+        expect(
+          serializeDocumentToMarkdown(doc),
+          '```dart\nvoid main() {}\n```',
         );
       });
 
@@ -958,9 +970,20 @@ with multiple lines
 This is some code
 ```''');
 
-        final code = codeBlockDoc.first as ParagraphNode;
-        expect(code.getMetadataValue('blockType'), codeAttribution);
+        final code = codeBlockDoc.first as CodeBlockNode;
+        expect(code.language, kDefaultCodeLanguage);
         expect(code.text.toPlainText(), 'This is some code\n');
+      });
+
+      test('code block with language', () {
+        final codeBlockDoc = deserializeMarkdownToDocument('''
+```yaml
+key: value
+```''');
+
+        final code = codeBlockDoc.first as CodeBlockNode;
+        expect(code.language, 'yaml');
+        expect(code.text.toPlainText(), 'key: value\n');
       });
 
       test('image', () {
