@@ -547,9 +547,32 @@ class _CodeBlockComponentState extends State<CodeBlockComponent>
         Positioned(
           top: _kLanguageSelectorMargin,
           right: _kLanguageSelectorMargin,
-          child: _CodeBlockLanguageSelector(
-            currentLanguage: viewModel.language,
-            onLanguageSelected: _handleLanguageSelected,
+          child: Row(
+            spacing: 8,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _CodeBlockLanguageSelector(
+                currentLanguage: viewModel.language,
+                onLanguageSelected: _handleLanguageSelected,
+              ),
+              _CopyButton(
+                onCopy: () {
+                  final codeContent = viewModel.text.toPlainText();
+                  final language = _canonicalizeLanguageKey(viewModel.language);
+                  final languageSuffix =
+                      language.isEmpty || language == kDefaultCodeLanguage
+                          ? ''
+                          : language;
+                  final textToCopy = [
+                    '```$languageSuffix',
+                    codeContent,
+                    '```',
+                  ].join('\n');
+
+                  Clipboard.setData(ClipboardData(text: textToCopy));
+                },
+              ),
+            ],
           ),
         ),
       ],
@@ -662,7 +685,7 @@ class _LanguageChip extends StatelessWidget {
         border: Border.all(color: colorScheme.outline.withOpacity(0.3)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -685,6 +708,81 @@ class _LanguageChip extends StatelessWidget {
               color: foreground,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CopyButton extends StatefulWidget {
+  const _CopyButton({required this.onCopy});
+
+  final VoidCallback onCopy;
+
+  @override
+  State<_CopyButton> createState() => _CopyButtonState();
+}
+
+class _CopyButtonState extends State<_CopyButton> {
+  bool _isCopied = false;
+  Timer? _resetTimer;
+
+  @override
+  void dispose() {
+    _resetTimer?.cancel();
+    super.dispose();
+  }
+
+  void _handleCopy() {
+    widget.onCopy();
+    setState(() {
+      _isCopied = true;
+    });
+    _resetTimer?.cancel();
+    _resetTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isCopied = false;
+        });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final brightness = theme.brightness;
+
+    final Color background = brightness == Brightness.dark
+        ? Color.alphaBlend(
+            colorScheme.surfaceVariant.withOpacity(0.6),
+            colorScheme.surface,
+          )
+        : colorScheme.surfaceVariant.withOpacity(0.9);
+    final Color foreground = colorScheme.onSurfaceVariant;
+
+    return InkWell(
+      onTap: _handleCopy,
+      borderRadius: BorderRadius.circular(12),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: background,
+          border: Border.all(color: colorScheme.outline.withOpacity(0.3)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _isCopied ? Icons.check : Icons.copy,
+                size: 16,
+                color: foreground,
+              ),
+            ],
+          ),
         ),
       ),
     );
