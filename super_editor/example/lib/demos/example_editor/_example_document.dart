@@ -1,3 +1,4 @@
+import 'package:example/demos/example_editor/_codeblock.dart';
 import 'package:flutter/rendering.dart';
 import 'package:super_editor/super_editor.dart';
 
@@ -13,17 +14,7 @@ MutableDocument createInitialDocument() {
           padding: EdgeInsets.zero,
         ).toMetadata(),
       ),
-      CodeBlockNode(
-        id: Editor.createNodeId(),
-        language: 'yaml',
-        text: AttributedText(
-          'site:\n'
-          '  title: Flutter Bounty Hunters\n'
-          '  products:\n'
-          '    - super_editor\n'
-          '    - super_reader\n',
-        ),
-      ),
+      buildCodeBlockNode(),
       ParagraphNode(
         id: Editor.createNodeId(),
         text: AttributedText(

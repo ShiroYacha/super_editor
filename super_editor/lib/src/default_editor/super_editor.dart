@@ -643,7 +643,7 @@ class SuperEditorState extends State<SuperEditor> {
         _docStylesheetStyler,
         _docLayoutPerComponentBlockStyler,
         _codeBlockLanguageStyler,
-        _customUnderlineStyler,
+        // _customUnderlineStyler,
         ...widget.customStylePhases,
         if (showComposingUnderline)
           SingleColumnLayoutComposingRegionStyler(

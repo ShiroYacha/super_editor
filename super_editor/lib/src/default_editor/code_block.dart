@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' show PointerDeviceKind;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -514,45 +513,6 @@ class _CodeBlockComponentState extends State<CodeBlockComponent>
       brightness: brightness,
     );
 
-    final scrollBehavior = ScrollConfiguration.of(context);
-    final dragDevices = scrollBehavior.dragDevices;
-    // Prevent mouse drags from being treated as scroll gestures so that users can
-    // drag to select text inside the code block, even when an ancestor
-    // ScrollConfiguration enables mouse-based dragging.
-    final Set<PointerDeviceKind>? adjustedDragDevices =
-        dragDevices.contains(PointerDeviceKind.mouse)
-            ? (Set<PointerDeviceKind>.of(dragDevices)
-              ..remove(PointerDeviceKind.mouse))
-            : null;
-
-    Widget scrollableContent = SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      controller: _horizontalScrollController,
-      child: Padding(
-        padding: viewModel.innerPadding,
-        child: TextComponent(
-          key: _textKey,
-          text: viewModel.text,
-          textDirection: viewModel.textDirection,
-          textAlign: viewModel.textAlignment,
-          textStyleBuilder: textStyleBuilder,
-          inlineWidgetBuilders: viewModel.inlineWidgetBuilders,
-          textSelection: viewModel.selection,
-          selectionColor: viewModel.selectionColor,
-          highlightWhenEmpty: viewModel.highlightWhenEmpty,
-          underlines: viewModel.createUnderlines(),
-          showDebugPaint: widget.showDebugPaint,
-        ),
-      ),
-    );
-
-    if (adjustedDragDevices != null) {
-      scrollableContent = ScrollConfiguration(
-        behavior: scrollBehavior.copyWith(dragDevices: adjustedDragDevices),
-        child: scrollableContent,
-      );
-    }
-
     return Stack(
       children: [
         Positioned.fill(
@@ -732,10 +692,42 @@ class _LanguageChip extends StatelessWidget {
 
 /// Attribution applied to text spans that represent syntax highlight tokens.
 class CodeSyntaxHighlightAttribution implements Attribution {
-  CodeSyntaxHighlightAttribution({
-    required this.tokenType,
+  factory CodeSyntaxHighlightAttribution({
+    required String tokenType,
     required Map<Brightness, TextStyle> stylesByBrightness,
-  }) : stylesByBrightness = Map.unmodifiable(stylesByBrightness);
+  }) {
+    assert(stylesByBrightness.isNotEmpty,
+        'stylesByBrightness must include at least one TextStyle.');
+
+    final sanitized = Map<Brightness, TextStyle>.of(stylesByBrightness);
+    final resolvedStyles = Map<Brightness, TextStyle>.unmodifiable(sanitized);
+    final lightStyle = _resolveLightStyle(sanitized);
+    final darkStyle = sanitized[Brightness.dark];
+
+    return CodeSyntaxHighlightAttribution._(
+      tokenType: tokenType,
+      stylesByBrightness: resolvedStyles,
+      lightStyle: lightStyle,
+      darkStyle: darkStyle,
+      id: _createId(tokenType, resolvedStyles),
+      hashCodeValue: Object.hash(tokenType, _mapEquality.hash(resolvedStyles)),
+    );
+  }
+
+  CodeSyntaxHighlightAttribution._({
+    required this.tokenType,
+    required this.stylesByBrightness,
+    required TextStyle lightStyle,
+    TextStyle? darkStyle,
+    required String id,
+    required int hashCodeValue,
+  })  : _lightStyle = lightStyle,
+        _darkStyle = darkStyle,
+        _id = id,
+        _hashCode = hashCodeValue;
+
+  static const MapEquality<Brightness, TextStyle> _mapEquality =
+      MapEquality<Brightness, TextStyle>();
 
   /// Token identifier supplied by the syntax highlighter (e.g., `keyword`, `string`).
   final String tokenType;
@@ -743,43 +735,90 @@ class CodeSyntaxHighlightAttribution implements Attribution {
   /// Styles applied to this token for each [Brightness].
   final Map<Brightness, TextStyle> stylesByBrightness;
 
-  static const DeepCollectionEquality _stylesEquality =
-      DeepCollectionEquality();
+  final TextStyle _lightStyle;
+  final TextStyle? _darkStyle;
+  final String _id;
+  final int _hashCode;
 
   /// Resolves the highlight style for the given [brightness].
   TextStyle resolve(Brightness brightness) {
-    return stylesByBrightness[brightness] ??
-        stylesByBrightness[Brightness.light] ??
-        stylesByBrightness.values.first;
+    if (brightness == Brightness.dark) {
+      return _darkStyle ?? _lightStyle;
+    }
+    if (brightness == Brightness.light) {
+      return _lightStyle;
+    }
+    return stylesByBrightness[brightness] ?? _lightStyle;
   }
 
   @override
-  String get id {
-    final stylesSignature = stylesByBrightness.entries
-        .map((entry) =>
-            '${entry.key == Brightness.dark ? 'dark' : 'light'}:${entry.value.hashCode}')
-        .join('|');
-    return 'code.syntax.$tokenType.$stylesSignature';
-  }
+  String get id => _id;
 
   @override
   bool canMergeWith(Attribution other) {
     return other is CodeSyntaxHighlightAttribution &&
         other.tokenType == tokenType &&
-        _stylesEquality.equals(other.stylesByBrightness, stylesByBrightness);
+        _mapEquality.equals(other.stylesByBrightness, stylesByBrightness);
   }
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is CodeSyntaxHighlightAttribution &&
-          runtimeType == other.runtimeType &&
-          tokenType == other.tokenType &&
-          _stylesEquality.equals(stylesByBrightness, other.stylesByBrightness);
+          other.tokenType == tokenType &&
+          _mapEquality.equals(other.stylesByBrightness, stylesByBrightness);
 
   @override
-  int get hashCode =>
-      Object.hash(tokenType, _stylesEquality.hash(stylesByBrightness));
+  int get hashCode => _hashCode;
+
+  static TextStyle _resolveLightStyle(Map<Brightness, TextStyle> styles) {
+    return styles[Brightness.light] ?? styles.values.first;
+  }
+
+  static String _createId(
+    String tokenType,
+    Map<Brightness, TextStyle> styles,
+  ) {
+    if (styles.isEmpty) {
+      return 'code.syntax.$tokenType';
+    }
+
+    final signatureParts = <String>[];
+    for (final brightness in const [Brightness.light, Brightness.dark]) {
+      final style = styles[brightness];
+      if (style != null) {
+        signatureParts
+            .add('${_describeBrightness(brightness)}:${style.hashCode}');
+      }
+    }
+
+    if (styles.length > signatureParts.length) {
+      final additionalEntries = styles.entries
+          .where((entry) =>
+              entry.key != Brightness.light && entry.key != Brightness.dark)
+          .toList()
+        ..sort((a, b) => a.key.toString().compareTo(b.key.toString()));
+
+      for (final entry in additionalEntries) {
+        signatureParts.add('${entry.key.toString()}:${entry.value.hashCode}');
+      }
+    }
+
+    if (signatureParts.isEmpty) {
+      return 'code.syntax.$tokenType';
+    }
+
+    return 'code.syntax.$tokenType.${signatureParts.join('|')}';
+  }
+
+  static String _describeBrightness(Brightness brightness) {
+    switch (brightness) {
+      case Brightness.light:
+        return 'light';
+      case Brightness.dark:
+        return 'dark';
+    }
+  }
 }
 
 /// Builds a [TextStyle] for code block content, merging any syntax highlight styles provided by attributions.
