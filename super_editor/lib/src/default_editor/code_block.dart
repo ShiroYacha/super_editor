@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -891,6 +892,7 @@ class CodeSyntaxHighlighter {
     required String source,
     required String language,
   }) async {
+    final stopwatch = Stopwatch()..start();
     if (source.isEmpty) {
       return const <CodeSyntaxHighlightSpan>[];
     }
@@ -919,6 +921,8 @@ class CodeSyntaxHighlighter {
       return const <CodeSyntaxHighlightSpan>[];
     } on PlatformException catch (_) {
       return const <CodeSyntaxHighlightSpan>[];
+    } finally {
+      print('CodeSyntaxHighlighter.highlight took ${stopwatch.elapsed}');
     }
   }
 
@@ -1298,17 +1302,14 @@ class ApplyCodeBlockHighlightCommand extends EditCommand {
       // The text changed since this highlight was computed. Skip.
       return;
     }
-
     if (_codeBlockHighlightEquals(attributedText, spans)) {
       return;
     }
-
     final baseMarkers = attributedText.spans.markers
         .where(
             (marker) => marker.attribution is! CodeSyntaxHighlightAttribution)
         .map((marker) => marker.copyWith())
         .toList(growable: true);
-
     for (final span in spans) {
       baseMarkers
         ..add(
@@ -1756,29 +1757,74 @@ AttributedText _stripCodeSyntaxHighlights(AttributedText text) {
   );
 }
 
-bool _codeBlockHighlightEquals(
-    AttributedText text, List<CodeSyntaxHighlightSpan> spans) {
-  if (text.length == 0) {
-    return spans.isEmpty;
+List<_HighlightSignature>? _collectExistingCodeSyntaxHighlights(
+  AttributedText text,
+) {
+  final markers = text.spans.markers;
+  if (markers.isEmpty) {
+    return const <_HighlightSignature>[];
   }
 
-  final existingHighlightSpans = text.spans
-      .getAttributionSpansInRange(
-        attributionFilter: (attribution) =>
-            attribution is CodeSyntaxHighlightAttribution,
-        start: 0,
-        end: text.length - 1,
-        resizeSpansToFitInRange: true,
-      )
-      .map((span) => _HighlightSignature(
-            start: span.start,
-            end: span.end,
-            attribution: span.attribution as CodeSyntaxHighlightAttribution,
-          ))
-      .toList()
-    ..sort();
+  final pendingStarts =
+      LinkedHashMap<CodeSyntaxHighlightAttribution, List<int>>.identity();
+  final signatures = <_HighlightSignature>[];
 
-  final desiredSpans = spans
+  for (final marker in markers) {
+    final attribution = marker.attribution;
+    if (attribution is! CodeSyntaxHighlightAttribution) {
+      continue;
+    }
+
+    if (marker.isStart) {
+      (pendingStarts[attribution] ??= <int>[]).add(marker.offset);
+      continue;
+    }
+
+    final starts = pendingStarts[attribution];
+    if (starts == null || starts.isEmpty) {
+      return null;
+    }
+
+    final start = starts.removeLast();
+    signatures.add(
+      _HighlightSignature(
+        start: start,
+        end: marker.offset,
+        attribution: attribution,
+      ),
+    );
+
+    if (starts.isEmpty) {
+      pendingStarts.remove(attribution);
+    }
+  }
+
+  if (pendingStarts.isNotEmpty) {
+    return null;
+  }
+
+  signatures.sort();
+  return signatures;
+}
+
+bool _codeBlockHighlightEquals(
+    AttributedText text, List<CodeSyntaxHighlightSpan> spans) {
+  if (spans.isEmpty) {
+    return !text.spans.markers.any(
+      (marker) => marker.attribution is CodeSyntaxHighlightAttribution,
+    );
+  }
+
+  final existingSignatures = _collectExistingCodeSyntaxHighlights(text);
+  if (existingSignatures == null) {
+    return false;
+  }
+
+  if (existingSignatures.length != spans.length) {
+    return false;
+  }
+
+  final desiredSignatures = spans
       .map((span) => _HighlightSignature(
             start: span.start,
             end: span.end,
@@ -1787,8 +1833,13 @@ bool _codeBlockHighlightEquals(
       .toList()
     ..sort();
 
-  return const ListEquality<_HighlightSignature>()
-      .equals(existingHighlightSpans, desiredSpans);
+  for (var i = 0; i < desiredSignatures.length; i += 1) {
+    if (existingSignatures[i] != desiredSignatures[i]) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 class _HighlightSignature implements Comparable<_HighlightSignature> {
