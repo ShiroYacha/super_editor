@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:super_editor/src/core/document.dart';
 import 'package:super_editor/src/core/document_layout.dart';
 import 'package:super_editor/src/core/document_selection.dart';
+import 'package:super_editor/src/default_editor/code_block.dart';
 import 'package:super_editor/src/default_editor/text.dart';
 import 'package:super_editor/src/infrastructure/content_layers.dart';
 
@@ -30,11 +31,12 @@ class AttributionBounds extends ContentLayerStatefulWidget {
   final AttributionBoundsBuilder builder;
 
   @override
-  ContentLayerState<ContentLayerStatefulWidget, List<AttributionBoundsLayout>> createState() =>
-      _AttributionBoundsState();
+  ContentLayerState<ContentLayerStatefulWidget, List<AttributionBoundsLayout>>
+      createState() => _AttributionBoundsState();
 }
 
-class _AttributionBoundsState extends ContentLayerState<AttributionBounds, List<AttributionBoundsLayout>> {
+class _AttributionBoundsState extends ContentLayerState<AttributionBounds,
+    List<AttributionBoundsLayout>> {
   @override
   void initState() {
     super.initState();
@@ -58,11 +60,12 @@ class _AttributionBoundsState extends ContentLayerState<AttributionBounds, List<
   }
 
   @override
-  List<AttributionBoundsLayout>? computeLayoutData(Element? contentElement, RenderObject? contentLayout) {
+  List<AttributionBoundsLayout>? computeLayoutData(
+      Element? contentElement, RenderObject? contentLayout) {
     final bounds = <AttributionBoundsLayout>[];
 
     for (final node in widget.document) {
-      if (node is! TextNode) {
+      if (node is! TextNode || node is CodeBlockNode) {
         continue;
       }
 
@@ -73,14 +76,19 @@ class _AttributionBoundsState extends ContentLayerState<AttributionBounds, List<
 
       for (final span in spans) {
         final range = DocumentRange(
-          start: DocumentPosition(nodeId: node.id, nodePosition: TextNodePosition(offset: span.start)),
-          end: DocumentPosition(nodeId: node.id, nodePosition: TextNodePosition(offset: span.end + 1)),
+          start: DocumentPosition(
+              nodeId: node.id,
+              nodePosition: TextNodePosition(offset: span.start)),
+          end: DocumentPosition(
+              nodeId: node.id,
+              nodePosition: TextNodePosition(offset: span.end + 1)),
         );
 
         bounds.add(
           AttributionBoundsLayout(
             span.attribution,
-            widget.layout.getRectForSelection(range.start, range.end) ?? Rect.zero,
+            widget.layout.getRectForSelection(range.start, range.end) ??
+                Rect.zero,
           ),
         );
       }
@@ -90,7 +98,8 @@ class _AttributionBoundsState extends ContentLayerState<AttributionBounds, List<
   }
 
   @override
-  Widget doBuild(BuildContext context, List<AttributionBoundsLayout>? layoutData) {
+  Widget doBuild(
+      BuildContext context, List<AttributionBoundsLayout>? layoutData) {
     if (layoutData == null) {
       return const SizedBox();
     }
@@ -133,4 +142,5 @@ typedef AttributionBoundsSelector = bool Function(Attribution attribution);
 
 /// Builder that (optionally) returns a widget that is positioned at the size
 /// and location of attributed text.
-typedef AttributionBoundsBuilder = Widget? Function(BuildContext context, Attribution attribution);
+typedef AttributionBoundsBuilder = Widget? Function(
+    BuildContext context, Attribution attribution);
