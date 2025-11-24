@@ -861,11 +861,20 @@ class CodeSyntaxHighlightAttribution implements Attribution {
   }
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is CodeSyntaxHighlightAttribution &&
-          other.tokenType == tokenType &&
-          _mapEquality.equals(other.stylesByBrightness, stylesByBrightness);
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! CodeSyntaxHighlightAttribution) return false;
+    if (other.tokenType != tokenType) return false;
+
+    // Compare only the color of the text style in the first map key
+    final thisFirstEntry = stylesByBrightness.entries.firstOrNull;
+    final otherFirstEntry = other.stylesByBrightness.entries.firstOrNull;
+
+    if (thisFirstEntry == null && otherFirstEntry == null) return true;
+    if (thisFirstEntry == null || otherFirstEntry == null) return false;
+
+    return thisFirstEntry.value.color == otherFirstEntry.value.color;
+  }
 
   @override
   int get hashCode => _hashCode;

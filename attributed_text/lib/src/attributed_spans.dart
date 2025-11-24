@@ -262,20 +262,92 @@ class AttributedSpans {
   /// given [offset], optionally looking specifically for a marker with
   /// the given [attribution].
   SpanMarker? _getStartingMarkerAtOrBefore(int offset, {Attribution? attribution}) {
-    return _markers //
-        .reversed // search from the end so its the nearest start marker
-        .where((marker) {
-      return attribution == null || (marker.attribution == attribution);
-    }).firstWhereOrNull((marker) => marker.isStart && marker.offset <= offset);
+    if (_markers.isEmpty) {
+      return null;
+    }
+
+    final startIndex = _findLastMarkerIndexAtOrBefore(offset);
+    if (startIndex < 0) {
+      return null;
+    }
+
+    for (var i = startIndex; i >= 0; i -= 1) {
+      final marker = _markers[i];
+      if (!marker.isStart) {
+        continue;
+      }
+      if (attribution != null && marker.attribution != attribution) {
+        continue;
+      }
+      return marker;
+    }
+
+    return null;
   }
 
   /// Finds and returns the nearest [end] marker that appears at or after the
   /// given [offset], optionally looking specifically for a marker with
   /// the given [attribution].
   SpanMarker? _getEndingMarkerAtOrAfter(int offset, {Attribution? attribution}) {
-    return _markers
-        .where((marker) => attribution == null || (marker.attribution.id == attribution.id))
-        .firstWhereOrNull((marker) => marker.isEnd && marker.offset >= offset);
+    if (_markers.isEmpty) {
+      return null;
+    }
+
+    final endIndex = _findFirstMarkerIndexAtOrAfter(offset);
+    if (endIndex >= _markers.length) {
+      return null;
+    }
+
+    for (var i = endIndex; i < _markers.length; i += 1) {
+      final marker = _markers[i];
+      if (!marker.isEnd) {
+        continue;
+      }
+      if (attribution != null && marker.attribution.id != attribution.id) {
+        continue;
+      }
+      return marker;
+    }
+
+    return null;
+  }
+
+  int _findLastMarkerIndexAtOrBefore(int offset) {
+    var low = 0;
+    var high = _markers.length - 1;
+    var result = -1;
+
+    while (low <= high) {
+      final mid = low + ((high - low) >> 1);
+      final marker = _markers[mid];
+      if (marker.offset <= offset) {
+        result = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    return result;
+  }
+
+  int _findFirstMarkerIndexAtOrAfter(int offset) {
+    var low = 0;
+    var high = _markers.length - 1;
+    var result = _markers.length;
+
+    while (low <= high) {
+      final mid = low + ((high - low) >> 1);
+      final marker = _markers[mid];
+      if (marker.offset >= offset) {
+        result = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    return result;
   }
 
   /// Applies the [newAttribution] from [start] to [end], inclusive.

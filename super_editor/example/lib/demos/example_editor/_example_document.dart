@@ -14,7 +14,6 @@ MutableDocument createInitialDocument() {
           padding: EdgeInsets.zero,
         ).toMetadata(),
       ),
-      buildCodeBlockNode(),
       ParagraphNode(
         id: Editor.createNodeId(),
         text: AttributedText(
